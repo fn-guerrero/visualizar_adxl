@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <title>Monitor Completo ADXL345 - Vibraciones</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #1a1a1e;
+            color: #e2e2e5;
+            margin: 0;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        h1 { margin: 5px 0; color: #4fc3f7; font-size: 24px; }
+        .controls {
+            margin: 10px 0;
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            background: #252529;
+            padding: 10px 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        button {
+            background-color: #0288d1;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            font-size: 15px;
+            font-weight: bold;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover { background-color: #03a9f4; }
+        .status { font-size: 14px; font-weight: bold; }
+        .status.connected { color: #81c784; }
+        .status.disconnected { color: #e57373; }
+        .slider-container { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+        .chart-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin-top: 10px;
+            position: relative;
+        }
+        h2 { margin: 5px 0; font-size: 16px; color: #b0bec5; width: 100%; text-align: left; }
+        .legend { display: flex; gap: 15px; font-size: 12px; margin-bottom: 5px; }
+        .legend-item { display: flex; align-items: center; gap: 4px; }
+        .legend-x { color: #ff5252; }
+        .legend-y { color: #69f0ae; }
+        .legend-z { color: #40c4ff; }
+        .legend-v { color: #ffd740; }
+        canvas {
+            background-color: #0f0f11;
+            border: 1px solid #37474f;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>Análisis de Vibraciones en Tiempo Real</h1>
+    
+    <div class="controls">
+        <button id="btnConectar">Conectar ESP32</button>
+        <span id="txtEstado" class="status disconnected">Desconectado</span>
+        
+        <div class="slider-container">
+            <label for="zoomVibracion">Zoom Detector:</label>
+            <input type="range" id="zoomVibracion" min="1" max="50" value="10">
+            <span id="lblZoom">10x</span>
+        </div>
+    </div>
+
+    <!-- GRÁFICO 1: SEÑALES CRUDAS -->
+    <div class="chart-container">
+        <h2>Señales Originales (Ejes X, Y, Z con Gravedad Estática)</h2>
+        <div class="legend">
+            <div class="legend-item legend-x">■ X Crudo</div>
+            <div class="legend-item legend-y">■ Y Crudo</div>
+            <div class="legend-item legend-z">■ Z Crudo (Offset ~1g)</div>
+        </div>
+        <canvas id="graficoCrudo" width="800" height="220"></canvas>
+    </div>
+
+    <!-- GRÁFICO 2: DETECTOR DE VIBRACIÓN FILTRADO -->
+    <div class="chart-container">
+        <h2>Detector de Vibración (Pasaaltos >1 Hz + Suma de Valor Absoluto)</h2>
+        <div class="legend">
+            <div class="legend-item legend-v">■ Magnitud de Vibración Absoluta</div>
+        </div>
+        <canvas id="graficoVibracion" width="800" height="220"></canvas>
+    </div>
+
+    <script>
+        const btnConectar = document.getElementById('btnConectar');
+        const txtEstado = document.getElementById('txtEstado');
+        const zoomVibracion = document.getElementById('zoomVibracion');
+        const lblZoom = document.getElementById('lblZoom');
+        
+        const canvasCrudo = document.getElementById('graficoCrudo');
+        const ctxCrudo = canvasCrudo.getContext('2d');
+        const canvasVibracion = document.getElementById('graficoVibracion');
+        const ctxVibracion = canvasVibracion.getContext('2d');
+
+        const MAX_PUNTOS = 400; 
+        const datosX = new Array(MAX_PUNTOS).fill(0);
+        const datosY = new Array(MAX_PUNTOS).fill(0);
+        const datosZ = new Array(MAX_PUNTOS).fill(0);
+        const datosVib = new Array(MAX_PUNTOS).fill(0);
+
+        let puerto, lector, leyendo = false;
+        let rxBuffer = new Uint8Array(2048), rxLength = 0;
+
+        // --- VARIABLES DEL FILTRO PASAALTOS (F=400Hz, Fc=1Hz) ---
+        // Coeficiente Alfa calculado para 1Hz de corte a 400 muestras por segundo
+        const RC = 1.0 / (2.0 * Math.PI * 1.0);
+        const dT = 1.0 / 400.0;
+        const alpha = RC / (RC + dT); // Aprox ~0.9984
+
+        // Estados previos de las señales para el cálculo diferencial del filtro
+        let prevX = 0, prevY = 0, prevZ = 0;
+        let hpX = 0, hpY = 0, hpZ = 0;
+
+        let multiplicadorZoom = 10;
+
+        zoomVibracion.addEventListener('input', (e) => {
+            multiplicadorZoom = parseFloat(e.target.value);
+            lblZoom.textContent = multiplicadorZoom + "x";
+            renderGraficos();
+        });
+
+
+console.log("LLEGUE AL LISTENER");
+        btnConectar.addEventListener('click', async () => {
+            console.log("Boton conectar presionado");
+			if (leyendo) { leyendo = false; if (lector) await lector.cancel(); return; }
+            try {
+                puerto = await navigator.serial.requestPort();
+                await puerto.open({ baudRate: 115200 }); // Configurado a tu velocidad actual
+                txtEstado.textContent = "Conectado";
+                txtEstado.className = "status connected";
+                btnConectar.textContent = "Desconectar";
+                leyendo = true;
+                bucleLectura();
+            } catch (error) {
+                alert("Error de conexión: " + error.message);
+            }
+        });
+
+        async function bucleLectura() {
+            while (puerto.readable && leyendo) {
+                lector = puerto.readable.getReader();
+                try {
+                    while (true) {
+                        const { value, done } = await lector.read();
+                        if (done) break;
+                        
+                        if (rxLength + value.length > rxBuffer.length) {
+                            let nBuf = new Uint8Array((rxLength + value.length) * 2);
+                            nBuf.set(rxBuffer.subarray(0, rxLength));
+                            rxBuffer = nBuf;
+                        }
+                        rxBuffer.set(value, rxLength);
+                        rxLength += value.length;
+                        procesarBuffer();
+                    }
+                } catch (e) { 
+                    console.error("Error en la lectura de bytes:", e); 
+                } finally { 
+                    lector.releaseLock(); 
+                }
+            }
+            
+            // CORREGIDO: Restablecer correctamente la interfaz al desconectar o fallar
+            txtEstado.textContent = "Desconectado"; 
+            txtEstado.className = "status disconnected";
+            btnConectar.textContent = "Conectar ESP32"; 
+            leyendo = false;
+        }
+
+        function procesarBuffer() {
+            const TRAMA_SIZE = 124;
+            while (rxLength >= TRAMA_SIZE) {
+                let idx = -1;
+                for (let i = 0; i <= rxLength - TRAMA_SIZE; i++) {
+                    if (rxBuffer[i] === 0xA5 && rxBuffer[i+1] === 0xA5 && rxBuffer[i+2] === 0xA5 && rxBuffer[i+3] === 0xA5) {
+                        idx = i; break;
+                    }
+                }
+                if (idx === -1) { if (rxLength > 4) { rxBuffer.copyWithin(0, rxLength - 3, rxLength); rxLength = 3; } return; }
+                if (idx > 0) { rxBuffer.copyWithin(0, idx, rxLength); rxLength -= idx; if (rxLength < TRAMA_SIZE) return; }
+
+                const view = new DataView(rxBuffer.buffer, 4, 120);
+                
+                for (let m = 0; m < 20; m++) {
+                    const x = view.getInt16(m * 6 + 0, true);
+                    const y = view.getInt16(m * 6 + 2, true);
+                    const z = view.getInt16(m * 6 + 4, true);
+
+                    // Actualizar colas de datos crudos
+                    datosX.shift(); datosX.push(x);
+                    datosY.shift(); datosY.push(y);
+                    datosZ.shift(); datosZ.push(z);
+
+                    // --- EJECUCIÓN DEL FILTRO PASAALTOS (Fija frecuencia constante) ---
+                    hpX = alpha * (hpX + x - prevX);
+                    hpY = alpha * (hpY + y - prevY);
+                    hpZ = alpha * (hpZ + z - prevZ);
+
+                    prevX = x; prevY = y; prevZ = z;
+
+                    // --- DETECTOR DE VIBRACIÓN: SUMA ABSOLUTA ---
+                    // Al estar filtrado, el reposo total se estabiliza exactamente en 0
+                    const vibracionAbsoluta = Math.abs(hpX) + Math.abs(hpY) + Math.abs(hpZ);
+                    datosVib.shift(); datosVib.push(vibracionAbsoluta);
+                }
+                rxBuffer.copyWithin(0, TRAMA_SIZE, rxLength); rxLength -= TRAMA_SIZE;
+            }
+            renderGraficos();
+        }
+
+        function renderGraficos() {
+            // 1. Render Gráfico Crudo
+            ctxCrudo.clearRect(0, 0, canvasCrudo.width, canvasCrudo.height);
+            ctxCrudo.strokeStyle = '#222';
+            ctxCrudo.beginPath(); ctxCrudo.moveTo(0, canvasCrudo.height/2); ctxCrudo.lineTo(canvasCrudo.width, canvasCrudo.height/2); ctxCrudo.stroke();
+            
+            const pasoX = canvasCrudo.width / (MAX_PUNTOS - 1);
+            const centroYCrudo = canvasCrudo.height / 2;
+            const escalaYCrudo = canvasCrudo.height / 1000; // Escala adaptada estática para señales crudas
+
+            dibujarLinea(ctxCrudo, datosX, pasoX, centroYCrudo, escalaYCrudo, '#ff5252');
+            dibujarLinea(ctxCrudo, datosY, pasoX, centroYCrudo, escalaYCrudo, '#69f0ae');
+            dibujarLinea(ctxCrudo, datosZ, pasoX, centroYCrudo, escalaYCrudo, '#40c4ff');
+
+            // 2. Render Gráfico Detector de Vibración
+            ctxVibracion.clearRect(0, 0, canvasVibracion.width, canvasVibracion.height);
+            
+            // Línea base abajo (Cero absoluto de movimiento)
+            ctxVibracion.strokeStyle = '#222';
+
+			ctxVibracion.beginPath(); ctxVibracion.moveTo(0, canvasVibracion.height - 10); ctxVibracion.lineTo(canvasVibracion.width, canvasVibracion.height - 10); ctxVibracion.stroke();
+			// Usamos el multiplicador del slider para escalar verticalmente la vibración (Zoom)
+			const escalaYVib = (canvasVibracion.height / 2000) * (multiplicadorZoom / 10);
+			const baseLineY = canvasVibracion.height - 10;
+			ctxVibracion.strokeStyle = '#ffd740';
+			ctxVibracion.lineWidth = 2;
+			ctxVibracion.beginPath();
+			for (let i = 0; i < MAX_PUNTOS; i++) {
+			const xCanvas = i * pasoX;
+			const yCanvas = baseLineY - (datosVib[i] * escalaYVib);
+			if (i === 0) ctxVibracion.moveTo(xCanvas, yCanvas);
+			else ctxVibracion.lineTo(xCanvas, yCanvas);
+			}
+			ctxVibracion.stroke();
+			}
+			function dibujarLinea(ctx, arr, pasoX, centroY, escalaY, color) {
+			ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.beginPath();
+			for (let i = 0; i < MAX_PUNTOS; i++) {
+			const xCanvas = i * pasoX;
+			const yCanvas = centroY - (arr[i] * escalaY);
+			if (i === 0) ctx.moveTo(xCanvas, yCanvas);
+			else ctx.lineTo(xCanvas, yCanvas);
+			}
+			ctx.stroke();
+			}
+			renderGraficos();
+			
+	</script>
+	</body>
+</html>
