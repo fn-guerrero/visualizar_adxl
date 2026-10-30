@@ -36,140 +36,277 @@
             cursor: pointer;
         }
         button:hover { background-color: #03a9f4; }
-        button:disabled {
-            background-color: #555;
-            cursor: not-allowed;
-            opacity: 0.6;
-        }
-        button.recording {
-            background-color: #d32f2f;
-            animation: pulse 1.5s infinite;
-        }
+        button:disabled { background-color: #555; cursor: not-allowed; opacity: 0.6; }
+        button.recording { background-color: #d32f2f; animation: pulse 1.5s infinite; }
         button.recording:hover { background-color: #f44336; }
         @keyframes pulse {
-            0% { opacity: 1; }
-            50% { opacity: 0.6; }
+            0%   { opacity: 1; }
+            50%  { opacity: 0.6; }
             100% { opacity: 1; }
         }
         .status { font-size: 14px; font-weight: bold; }
         .status.connected { color: #81c784; }
         .status.disconnected { color: #e57373; }
         .slider-container { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+        select {
+            background: #252529;
+            color: #e2e2e5;
+            border: 1px solid #455a64;
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-size: 14px;
+            cursor: pointer;
+        }
         .chart-container {
             display: flex;
             flex-direction: column;
             align-items: center;
             margin-top: 10px;
-            position: relative;
         }
-        h2 { margin: 5px 0; font-size: 16px; color: #b0bec5; width: 100%; text-align: left; }
-        .legend { display: flex; gap: 15px; font-size: 12px; margin-bottom: 5px; }
+        .chart-header {
+            width: 800px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 5px 0;
+        }
+        h2 { margin: 0; font-size: 16px; color: #b0bec5; }
+        .legend { display: flex; gap: 15px; font-size: 12px; margin-bottom: 5px; width: 800px; align-items: center; }
         .legend-item { display: flex; align-items: center; gap: 4px; }
         .legend-x { color: #ff5252; }
         .legend-y { color: #69f0ae; }
         .legend-z { color: #40c4ff; }
         .legend-v { color: #ffd740; }
+        .legend-fft-x { color: #ff5252; }
+        .legend-fft-y { color: #69f0ae; }
+        .legend-fft-z { color: #40c4ff; }
+        .scale-badge {
+            background: #2b2b36;
+            border: 1px solid #455a64;
+            color: #eceff1;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-family: monospace;
+            white-space: nowrap;
+        }
+        .canvas-wrapper {
+            position: relative;
+            width: 800px;
+        }
+        .axis-label {
+            position: absolute;
+            right: 8px;
+            font-size: 11px;
+            font-family: monospace;
+            color: #78909c;
+            pointer-events: none;
+            background: rgba(15,15,17,0.75);
+            padding: 1px 4px;
+            border-radius: 2px;
+        }
+        .axis-label-left {
+            position: absolute;
+            left: 8px;
+            font-size: 11px;
+            font-family: monospace;
+            color: #78909c;
+            pointer-events: none;
+            background: rgba(15,15,17,0.75);
+            padding: 1px 4px;
+            border-radius: 2px;
+        }
+        .axis-top  { top: 6px; }
+        .axis-mid  { top: 102px; }
+        .axis-bot  { bottom: 6px; }
+        .axis-bot-left { bottom: 6px; }
         canvas {
             background-color: #0f0f11;
             border: 1px solid #37474f;
             border-radius: 4px;
+            display: block;
         }
     </style>
 </head>
 <body>
 
     <h1>Análisis de Vibraciones en Tiempo Real</h1>
-    
+
     <div class="controls">
         <button id="btnConectar">Conectar ESP32</button>
         <button id="btnGrabar" disabled>Grabar CSV</button>
         <span id="txtEstado" class="status disconnected">Desconectado</span>
         <span id="txtGrabacion" style="font-size: 13px; color: #ff8a80; display: none;">Grabando muestras: <span id="lblMuestras">0</span></span>
-        
         <div class="slider-container">
-            <label for="zoomVibracion">Zoom Detector:</label>
-            <input type="range" id="zoomVibracion" min="1" max="50" value="10">
+            <label for="zoomVibracion">Ganancia Detector:</label>
+            <input type="range" id="zoomVibracion" min="1" max="200" value="10">
             <span id="lblZoom">10x</span>
         </div>
     </div>
 
     <!-- GRÁFICO 1: SEÑALES CRUDAS -->
     <div class="chart-container">
-        <h2>Señales Originales (Ejes X, Y, Z con Gravedad Estática)</h2>
+        <div class="chart-header">
+            <h2>Señales Originales (Ejes X, Y, Z con Gravedad Estática)</h2>
+            <span class="scale-badge">Fondo de Escala: ±1.95 g (±500 LSB)&nbsp;&nbsp;|&nbsp;&nbsp;Ventana: 1.00 s</span>
+        </div>
         <div class="legend">
             <div class="legend-item legend-x">■ X Crudo</div>
             <div class="legend-item legend-y">■ Y Crudo</div>
             <div class="legend-item legend-z">■ Z Crudo (Offset ~1g)</div>
         </div>
-        <canvas id="graficoCrudo" width="800" height="220"></canvas>
+        <div class="canvas-wrapper" style="height:220px;">
+            <span class="axis-label axis-top">+1.95 g (+500 LSB)</span>
+            <span class="axis-label axis-mid">0 g (0 LSB)</span>
+            <span class="axis-label axis-bot">-1.95 g (-500 LSB)</span>
+            <span class="axis-label-left axis-bot-left">0 s</span>
+            <canvas id="graficoCrudo" width="800" height="220"></canvas>
+        </div>
     </div>
 
-    <!-- GRÁFICO 2: DETECTOR DE VIBRACIÓN FILTRADO -->
+    <!-- GRÁFICO 2: DETECTOR DE VIBRACIÓN -->
     <div class="chart-container">
-        <h2>Detector de Vibración (Pasaaltos >1 Hz + Suma de Valor Absoluto)</h2>
-        <div class="legend">
-            <div class="legend-item legend-v">■ Magnitud de Vibración Absoluta</div>
+        <div class="chart-header">
+            <h2>Detector de Vibración (Pasaaltos >1 Hz + Suma Absoluta)</h2>
+            <span id="badgeEscalaVib" class="scale-badge">Fondo de Escala: 7.46 g (1909 LSB)&nbsp;&nbsp;|&nbsp;&nbsp;Ventana: 1.00 s</span>
         </div>
-        <canvas id="graficoVibracion" width="800" height="220"></canvas>
+        <div class="legend">
+            <div class="legend-item legend-v">■ Magnitud de Vibración Absoluta (|hpX|+|hpY|+|hpZ|)</div>
+        </div>
+        <div class="canvas-wrapper" style="height:220px;">
+            <span id="labelVibTop" class="axis-label axis-top">7.46 g (1909 LSB)</span>
+            <span class="axis-label axis-bot">0 g (0 LSB)</span>
+            <span class="axis-label-left axis-bot-left">0 s</span>
+            <canvas id="graficoVibracion" width="800" height="220"></canvas>
+        </div>
+    </div>
+
+    <!-- GRÁFICO 3: FFT -->
+    <div class="chart-container">
+        <div class="chart-header">
+            <h2>Espectro de Frecuencias — FFT 256 pts (señal post pasa-altos)</h2>
+            <div style="display:flex; gap:10px; align-items:center;">
+                <label for="selCanal" style="font-size:13px; color:#b0bec5;">Canal:</label>
+                <select id="selCanal">
+                    <option value="X">X</option>
+                    <option value="Y">Y</option>
+                    <option value="Z">Z</option>
+                </select>
+                <span id="badgeFFT" class="scale-badge">0 Hz – 200 Hz&nbsp;&nbsp;|&nbsp;&nbsp;256 pts → resolución 1.56 Hz/bin</span>
+            </div>
+        </div>
+        <div class="legend">
+            <div id="legendFFT" class="legend-item legend-fft-x">■ Canal X (post pasa-altos)</div>
+            <span style="flex:1"></span>
+            <span id="labelPico" class="scale-badge" style="margin-left:auto;">Pico: — Hz</span>
+        </div>
+        <div class="canvas-wrapper" style="height:200px;">
+            <span class="axis-label axis-top" id="fftTopLabel">Amplitud máx</span>
+            <span class="axis-label axis-bot">0</span>
+            <span class="axis-label-left axis-bot-left">1 Hz</span>
+            <canvas id="graficoFFT" width="800" height="200"></canvas>
+        </div>
     </div>
 
     <script>
-        const btnConectar = document.getElementById('btnConectar');
-        const btnGrabar = document.getElementById('btnGrabar');
-        const txtEstado = document.getElementById('txtEstado');
-        const txtGrabacion = document.getElementById('txtGrabacion');
-        const lblMuestras = document.getElementById('lblMuestras');
+        // ─── CONSTANTES FÍSICAS ────────────────────────────────────────────
+        const FS = 400;           // Hz, frecuencia de muestreo
+        const MAX_PUNTOS = 400;   // puntos en ventana temporal = 1 s exacto
+        const FFT_N = 256;        // puntos de la FFT (potencia de 2)
+        const LSB_POR_G = 256;    // 256 LSB/g en modo ±2g ADXL345
+
+        // ─── DOM ───────────────────────────────────────────────────────────
+        const btnConectar   = document.getElementById('btnConectar');
+        const btnGrabar     = document.getElementById('btnGrabar');
+        const txtEstado     = document.getElementById('txtEstado');
+        const txtGrabacion  = document.getElementById('txtGrabacion');
+        const lblMuestras   = document.getElementById('lblMuestras');
         const zoomVibracion = document.getElementById('zoomVibracion');
-        const lblZoom = document.getElementById('lblZoom');
-        
-        const canvasCrudo = document.getElementById('graficoCrudo');
-        const ctxCrudo = canvasCrudo.getContext('2d');
-        const canvasVibracion = document.getElementById('graficoVibracion');
-        const ctxVibracion = canvasVibracion.getContext('2d');
+        const lblZoom       = document.getElementById('lblZoom');
+        const badgeEscalaVib= document.getElementById('badgeEscalaVib');
+        const labelVibTop   = document.getElementById('labelVibTop');
+        const selCanal      = document.getElementById('selCanal');
+        const legendFFT     = document.getElementById('legendFFT');
+        const labelPico     = document.getElementById('labelPico');
+        const fftTopLabel   = document.getElementById('fftTopLabel');
 
-        const MAX_PUNTOS = 400; 
-        const datosX = new Array(MAX_PUNTOS).fill(0);
-        const datosY = new Array(MAX_PUNTOS).fill(0);
-        const datosZ = new Array(MAX_PUNTOS).fill(0);
+        const canvasCrudo    = document.getElementById('graficoCrudo');
+        const ctxCrudo       = canvasCrudo.getContext('2d');
+        const canvasVibracion= document.getElementById('graficoVibracion');
+        const ctxVibracion   = canvasVibracion.getContext('2d');
+        const canvasFFT      = document.getElementById('graficoFFT');
+        const ctxFFT         = canvasFFT.getContext('2d');
+
+        // ─── BUFFERS DE DATOS ─────────────────────────────────────────────
+        const datosX   = new Array(MAX_PUNTOS).fill(0);
+        const datosY   = new Array(MAX_PUNTOS).fill(0);
+        const datosZ   = new Array(MAX_PUNTOS).fill(0);
         const datosVib = new Array(MAX_PUNTOS).fill(0);
+        // Buffer de señales HP para la FFT (mantenemos las últimas 256 muestras filtradas)
+        const hpBufX = new Array(FFT_N).fill(0);
+        const hpBufY = new Array(FFT_N).fill(0);
+        const hpBufZ = new Array(FFT_N).fill(0);
 
+        // ─── ESTADO SERIE ─────────────────────────────────────────────────
         let puerto, lector, leyendo = false;
         let rxBuffer = new Uint8Array(2048), rxLength = 0;
 
-        // Variables de grabación a CSV
+        // ─── GRABACIÓN ────────────────────────────────────────────────────
         let grabando = false;
         let bufferGrabacion = [];
 
-        // --- VARIABLES DEL FILTRO PASAALTOS (F=400Hz, Fc=1Hz) ---
-        // Coeficiente Alfa calculado para 1Hz de corte a 400 muestras por segundo
-        const RC = 1.0 / (2.0 * Math.PI * 1.0);
-        const dT = 1.0 / 400.0;
-        const alpha = RC / (RC + dT); // Aprox ~0.9984
+        // ─── FILTRO PASA-ALTOS ────────────────────────────────────────────
+        const RC = 1.0 / (2.0 * Math.PI * 1.0); // Fc = 1 Hz
+        const dT = 1.0 / FS;
+        const alpha = RC / (RC + dT); // ≈ 0.9984
 
-        // Estados previos de las señales para el cálculo diferencial del filtro
         let prevX = 0, prevY = 0, prevZ = 0;
         let hpX = 0, hpY = 0, hpZ = 0;
 
+        // ─── ZOOM / GANANCIA ──────────────────────────────────────────────
         let multiplicadorZoom = 10;
+
+        function actualizarFondoEscalaVibracion() {
+            const escalaYVib = (canvasVibracion.height / 2000) * (multiplicadorZoom / 10);
+            const vibMaxLSB  = (canvasVibracion.height - 10) / escalaYVib;
+            const vibMaxG    = vibMaxLSB / LSB_POR_G;
+            const gStr = vibMaxG >= 10 ? vibMaxG.toFixed(1) : vibMaxG.toFixed(2);
+            const txt  = `Fondo de Escala: ${gStr} g (${Math.round(vibMaxLSB)} LSB)  |  Ventana: 1.00 s`;
+            badgeEscalaVib.textContent = txt;
+            labelVibTop.textContent    = `${gStr} g (${Math.round(vibMaxLSB)} LSB)`;
+        }
 
         zoomVibracion.addEventListener('input', (e) => {
             multiplicadorZoom = parseFloat(e.target.value);
             lblZoom.textContent = multiplicadorZoom + "x";
+            actualizarFondoEscalaVibracion();
             renderGraficos();
         });
 
+        actualizarFondoEscalaVibracion();
 
-console.log("LLEGUE AL LISTENER");
+        // ─── COLORES DE CANAL FFT ─────────────────────────────────────────
+        const colorCanal = { X: '#ff5252', Y: '#69f0ae', Z: '#40c4ff' };
+        const nombreCanal = { X: 'X (post pasa-altos)', Y: 'Y (post pasa-altos)', Z: 'Z (post pasa-altos)' };
+        const claseCanal  = { X: 'legend-fft-x', Y: 'legend-fft-y', Z: 'legend-fft-z' };
+
+        selCanal.addEventListener('change', () => {
+            const c = selCanal.value;
+            legendFFT.textContent  = `■ Canal ${nombreCanal[c]}`;
+            legendFFT.className    = `legend-item ${claseCanal[c]}`;
+            renderGraficos();
+        });
+
+        // ─── CONEXIÓN SERIE ───────────────────────────────────────────────
         btnConectar.addEventListener('click', async () => {
-            console.log("Boton conectar presionado");
-			if (leyendo) { leyendo = false; if (lector) await lector.cancel(); return; }
+            if (leyendo) { leyendo = false; if (lector) await lector.cancel(); return; }
             try {
                 puerto = await navigator.serial.requestPort();
-                await puerto.open({ baudRate: 115200 }); // Configurado a tu velocidad actual
-                txtEstado.textContent = "Conectado";
-                txtEstado.className = "status connected";
-                btnConectar.textContent = "Desconectar";
-                btnGrabar.disabled = false;
+                await puerto.open({ baudRate: 115200 });
+                txtEstado.textContent  = "Conectado";
+                txtEstado.className    = "status connected";
+                btnConectar.textContent= "Desconectar";
+                btnGrabar.disabled     = false;
                 leyendo = true;
                 bucleLectura();
             } catch (error) {
@@ -177,6 +314,7 @@ console.log("LLEGUE AL LISTENER");
             }
         });
 
+        // ─── GRABACIÓN CSV ────────────────────────────────────────────────
         btnGrabar.addEventListener('click', () => {
             if (!grabando) {
                 bufferGrabacion = [];
@@ -184,7 +322,7 @@ console.log("LLEGUE AL LISTENER");
                 btnGrabar.textContent = "Detener y Guardar CSV";
                 btnGrabar.classList.add('recording');
                 txtGrabacion.style.display = "inline";
-                lblMuestras.textContent = "0";
+                lblMuestras.textContent    = "0";
             } else {
                 detenerYDescargarCSV();
             }
@@ -195,27 +333,19 @@ console.log("LLEGUE AL LISTENER");
             btnGrabar.textContent = "Grabar CSV";
             btnGrabar.classList.remove('recording');
             txtGrabacion.style.display = "none";
-
-            if (bufferGrabacion.length === 0) {
-                alert("No se capturaron muestras para exportar.");
-                return;
-            }
-
-            const encabezado = "X;Y;Z\n";
-            const contenido = encabezado + bufferGrabacion.join("\n");
+            if (bufferGrabacion.length === 0) { alert("No se capturaron muestras para exportar."); return; }
+            const contenido = "X;Y;Z\n" + bufferGrabacion.join("\n");
             const blob = new Blob([contenido], { type: "text/csv;charset=utf-8;" });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement("a");
-            const fechaHora = new Date().toISOString().replace(/[:.]/g, "-");
-            a.href = url;
-            a.download = `adxl345_datos_${fechaHora}.csv`;
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
+            const url  = URL.createObjectURL(blob);
+            const a    = document.createElement("a");
+            a.href     = url;
+            a.download = `adxl345_datos_${new Date().toISOString().replace(/[:.]/g, "-")}.csv`;
+            document.body.appendChild(a); a.click(); document.body.removeChild(a);
             URL.revokeObjectURL(url);
             bufferGrabacion = [];
         }
 
+        // ─── BUCLE DE LECTURA SERIE ───────────────────────────────────────
         async function bucleLectura() {
             while (puerto.readable && leyendo) {
                 lector = puerto.readable.getReader();
@@ -223,7 +353,6 @@ console.log("LLEGUE AL LISTENER");
                     while (true) {
                         const { value, done } = await lector.read();
                         if (done) break;
-                        
                         if (rxLength + value.length > rxBuffer.length) {
                             let nBuf = new Uint8Array((rxLength + value.length) * 2);
                             nBuf.set(rxBuffer.subarray(0, rxLength));
@@ -233,117 +362,252 @@ console.log("LLEGUE AL LISTENER");
                         rxLength += value.length;
                         procesarBuffer();
                     }
-                } catch (e) { 
-                    console.error("Error en la lectura de bytes:", e); 
-                } finally { 
-                    lector.releaseLock(); 
+                } catch (e) {
+                    console.error("Error en la lectura:", e);
+                } finally {
+                    lector.releaseLock();
                 }
             }
-            
-            // CORREGIDO: Restablecer correctamente la interfaz al desconectar o fallar
-            txtEstado.textContent = "Desconectado"; 
-            txtEstado.className = "status disconnected";
-            btnConectar.textContent = "Conectar ESP32"; 
+            txtEstado.textContent   = "Desconectado";
+            txtEstado.className     = "status disconnected";
+            btnConectar.textContent = "Conectar ESP32";
             leyendo = false;
             btnGrabar.disabled = true;
             if (grabando) detenerYDescargarCSV();
         }
 
+        // ─── PROCESADO DE TRAMA BINARIA ───────────────────────────────────
         function procesarBuffer() {
             const TRAMA_SIZE = 124;
             while (rxLength >= TRAMA_SIZE) {
                 let idx = -1;
                 for (let i = 0; i <= rxLength - TRAMA_SIZE; i++) {
-                    if (rxBuffer[i] === 0xA5 && rxBuffer[i+1] === 0xA5 && rxBuffer[i+2] === 0xA5 && rxBuffer[i+3] === 0xA5) {
+                    if (rxBuffer[i]===0xA5 && rxBuffer[i+1]===0xA5 && rxBuffer[i+2]===0xA5 && rxBuffer[i+3]===0xA5) {
                         idx = i; break;
                     }
                 }
                 if (idx === -1) { if (rxLength > 4) { rxBuffer.copyWithin(0, rxLength - 3, rxLength); rxLength = 3; } return; }
-                if (idx > 0) { rxBuffer.copyWithin(0, idx, rxLength); rxLength -= idx; if (rxLength < TRAMA_SIZE) return; }
+                if (idx  >  0)  { rxBuffer.copyWithin(0, idx, rxLength); rxLength -= idx; if (rxLength < TRAMA_SIZE) return; }
 
                 const view = new DataView(rxBuffer.buffer, 4, 120);
-                
                 for (let m = 0; m < 20; m++) {
                     const x = view.getInt16(m * 6 + 0, true);
                     const y = view.getInt16(m * 6 + 2, true);
                     const z = view.getInt16(m * 6 + 4, true);
 
-                    // Actualizar colas de datos crudos
                     datosX.shift(); datosX.push(x);
                     datosY.shift(); datosY.push(y);
                     datosZ.shift(); datosZ.push(z);
 
-                    if (grabando) {
-                        bufferGrabacion.push(`${x};${y};${z}`);
-                    }
+                    if (grabando) bufferGrabacion.push(`${x};${y};${z}`);
 
-                    // --- EJECUCIÓN DEL FILTRO PASAALTOS (Fija frecuencia constante) ---
+                    // Filtro pasa-altos
                     hpX = alpha * (hpX + x - prevX);
                     hpY = alpha * (hpY + y - prevY);
                     hpZ = alpha * (hpZ + z - prevZ);
-
                     prevX = x; prevY = y; prevZ = z;
 
-                    // --- DETECTOR DE VIBRACIÓN: SUMA ABSOLUTA ---
-                    // Al estar filtrado, el reposo total se estabiliza exactamente en 0
-                    const vibracionAbsoluta = Math.abs(hpX) + Math.abs(hpY) + Math.abs(hpZ);
-                    datosVib.shift(); datosVib.push(vibracionAbsoluta);
+                    // Alimentar buffers para la FFT (ring: shift + push)
+                    hpBufX.shift(); hpBufX.push(hpX);
+                    hpBufY.shift(); hpBufY.push(hpY);
+                    hpBufZ.shift(); hpBufZ.push(hpZ);
+
+                    // Magnitud detector vibración
+                    datosVib.shift(); datosVib.push(Math.abs(hpX) + Math.abs(hpY) + Math.abs(hpZ));
                 }
                 rxBuffer.copyWithin(0, TRAMA_SIZE, rxLength); rxLength -= TRAMA_SIZE;
             }
-            if (grabando) {
-                lblMuestras.textContent = bufferGrabacion.length;
-            }
+            if (grabando) lblMuestras.textContent = bufferGrabacion.length;
             renderGraficos();
         }
 
+        // ─── FFT COOLEY-TUKEY (in-place, potencia de 2) ───────────────────
+        // Recibe arrays re[] e im[] de longitud N (potencia de 2), modifica in-place
+        function fft(re, im) {
+            const N = re.length;
+            // Bit-reversal permutation
+            for (let i = 1, j = 0; i < N; i++) {
+                let bit = N >> 1;
+                for (; j & bit; bit >>= 1) j ^= bit;
+                j ^= bit;
+                if (i < j) {
+                    [re[i], re[j]] = [re[j], re[i]];
+                    [im[i], im[j]] = [im[j], im[i]];
+                }
+            }
+            // Butterfly
+            for (let len = 2; len <= N; len <<= 1) {
+                const ang = -2 * Math.PI / len;
+                const wRe = Math.cos(ang), wIm = Math.sin(ang);
+                for (let i = 0; i < N; i += len) {
+                    let curRe = 1, curIm = 0;
+                    for (let j = 0; j < len / 2; j++) {
+                        const uRe = re[i+j],       uIm = im[i+j];
+                        const vRe = re[i+j+len/2] * curRe - im[i+j+len/2] * curIm;
+                        const vIm = re[i+j+len/2] * curIm + im[i+j+len/2] * curRe;
+                        re[i+j]       = uRe + vRe; im[i+j]       = uIm + vIm;
+                        re[i+j+len/2] = uRe - vRe; im[i+j+len/2] = uIm - vIm;
+                        const newRe = curRe*wRe - curIm*wIm;
+                        curIm = curRe*wIm + curIm*wRe;
+                        curRe = newRe;
+                    }
+                }
+            }
+        }
+
+        // Ventana de Hann para reducir spectral leakage
+        const hannWindow = new Float32Array(FFT_N);
+        for (let i = 0; i < FFT_N; i++) {
+            hannWindow[i] = 0.5 * (1 - Math.cos(2 * Math.PI * i / (FFT_N - 1)));
+        }
+
+        function calcularFFT(buf) {
+            // buf: últimos FFT_N valores HP del canal elegido
+            const re = new Float32Array(FFT_N);
+            const im = new Float32Array(FFT_N);
+            for (let i = 0; i < FFT_N; i++) {
+                re[i] = buf[i] * hannWindow[i];
+                im[i] = 0;
+            }
+            fft(re, im);
+            // Solo los primeros N/2 bins son significativos
+            const mag = new Float32Array(FFT_N / 2);
+            for (let i = 0; i < FFT_N / 2; i++) {
+                mag[i] = Math.sqrt(re[i]*re[i] + im[i]*im[i]) / FFT_N;
+            }
+            return mag;  // unidades: LSB·s (amplitud espectral)
+        }
+
+        // ─── RENDER ───────────────────────────────────────────────────────
         function renderGraficos() {
-            // 1. Render Gráfico Crudo
+            const pasoX = canvasCrudo.width / (MAX_PUNTOS - 1);
+
+            // ── Gráfico 1: señales crudas ──────────────────────────────────
             ctxCrudo.clearRect(0, 0, canvasCrudo.width, canvasCrudo.height);
             ctxCrudo.strokeStyle = '#222';
-            ctxCrudo.beginPath(); ctxCrudo.moveTo(0, canvasCrudo.height/2); ctxCrudo.lineTo(canvasCrudo.width, canvasCrudo.height/2); ctxCrudo.stroke();
-            
-            const pasoX = canvasCrudo.width / (MAX_PUNTOS - 1);
+            ctxCrudo.lineWidth = 1;
+            ctxCrudo.beginPath();
+            ctxCrudo.moveTo(0, canvasCrudo.height / 2);
+            ctxCrudo.lineTo(canvasCrudo.width, canvasCrudo.height / 2);
+            ctxCrudo.stroke();
+
             const centroYCrudo = canvasCrudo.height / 2;
-            const escalaYCrudo = canvasCrudo.height / 1000; // Escala adaptada estática para señales crudas
+            const escalaYCrudo = canvasCrudo.height / 1000; // ±500 LSB → borde
 
             dibujarLinea(ctxCrudo, datosX, pasoX, centroYCrudo, escalaYCrudo, '#ff5252');
             dibujarLinea(ctxCrudo, datosY, pasoX, centroYCrudo, escalaYCrudo, '#69f0ae');
             dibujarLinea(ctxCrudo, datosZ, pasoX, centroYCrudo, escalaYCrudo, '#40c4ff');
 
-            // 2. Render Gráfico Detector de Vibración
-            ctxVibracion.clearRect(0, 0, canvasVibracion.width, canvasVibracion.height);
-            
-            // Línea base abajo (Cero absoluto de movimiento)
-            ctxVibracion.strokeStyle = '#222';
+            // Etiqueta de tiempo derecha
+            dibujarEtiquetaTiempoX(ctxCrudo, canvasCrudo.width, canvasCrudo.height);
 
-			ctxVibracion.beginPath(); ctxVibracion.moveTo(0, canvasVibracion.height - 10); ctxVibracion.lineTo(canvasVibracion.width, canvasVibracion.height - 10); ctxVibracion.stroke();
-			// Usamos el multiplicador del slider para escalar verticalmente la vibración (Zoom)
-			const escalaYVib = (canvasVibracion.height / 2000) * (multiplicadorZoom / 10);
-			const baseLineY = canvasVibracion.height - 10;
-			ctxVibracion.strokeStyle = '#ffd740';
-			ctxVibracion.lineWidth = 2;
-			ctxVibracion.beginPath();
-			for (let i = 0; i < MAX_PUNTOS; i++) {
-			const xCanvas = i * pasoX;
-			const yCanvas = baseLineY - (datosVib[i] * escalaYVib);
-			if (i === 0) ctxVibracion.moveTo(xCanvas, yCanvas);
-			else ctxVibracion.lineTo(xCanvas, yCanvas);
-			}
-			ctxVibracion.stroke();
-			}
-			function dibujarLinea(ctx, arr, pasoX, centroY, escalaY, color) {
-			ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.beginPath();
-			for (let i = 0; i < MAX_PUNTOS; i++) {
-			const xCanvas = i * pasoX;
-			const yCanvas = centroY - (arr[i] * escalaY);
-			if (i === 0) ctx.moveTo(xCanvas, yCanvas);
-			else ctx.lineTo(xCanvas, yCanvas);
-			}
-			ctx.stroke();
-			}
-			renderGraficos();
-			
-	</script>
-	</body>
+            // ── Gráfico 2: detector de vibración ──────────────────────────
+            ctxVibracion.clearRect(0, 0, canvasVibracion.width, canvasVibracion.height);
+            ctxVibracion.strokeStyle = '#222';
+            ctxVibracion.lineWidth = 1;
+            ctxVibracion.beginPath();
+            ctxVibracion.moveTo(0, canvasVibracion.height - 10);
+            ctxVibracion.lineTo(canvasVibracion.width, canvasVibracion.height - 10);
+            ctxVibracion.stroke();
+
+            const escalaYVib = (canvasVibracion.height / 2000) * (multiplicadorZoom / 10);
+            const baseLineY  = canvasVibracion.height - 10;
+            ctxVibracion.strokeStyle = '#ffd740';
+            ctxVibracion.lineWidth   = 2;
+            ctxVibracion.beginPath();
+            for (let i = 0; i < MAX_PUNTOS; i++) {
+                const xC = i * pasoX;
+                const yC = baseLineY - datosVib[i] * escalaYVib;
+                if (i === 0) ctxVibracion.moveTo(xC, yC);
+                else         ctxVibracion.lineTo(xC, yC);
+            }
+            ctxVibracion.stroke();
+
+            dibujarEtiquetaTiempoX(ctxVibracion, canvasVibracion.width, canvasVibracion.height);
+
+            // ── Gráfico 3: FFT ─────────────────────────────────────────────
+            const canal = selCanal.value;
+            const hpBuf = canal === 'X' ? hpBufX : canal === 'Y' ? hpBufY : hpBufZ;
+            const mag   = calcularFFT(hpBuf);
+
+            // Buscar máximo (ignorando bin DC, bin 0 → freq=0)
+            let maxMag = 1e-6, picoBin = 1;
+            for (let i = 1; i < mag.length; i++) {
+                if (mag[i] > maxMag) { maxMag = mag[i]; picoBin = i; }
+            }
+            const picoHz = picoBin * (FS / FFT_N);
+            labelPico.textContent = `Pico: ${picoHz.toFixed(1)} Hz`;
+            fftTopLabel.textContent = `Ampl. máx: ${maxMag.toFixed(1)} LSB`;
+
+            ctxFFT.clearRect(0, 0, canvasFFT.width, canvasFFT.height);
+
+            // Grid horizontal sutil
+            ctxFFT.strokeStyle = '#1e2a30';
+            ctxFFT.lineWidth = 1;
+            for (let g = 0; g <= 4; g++) {
+                const yG = canvasFFT.height - (g / 4) * canvasFFT.height;
+                ctxFFT.beginPath();
+                ctxFFT.moveTo(0, yG); ctxFFT.lineTo(canvasFFT.width, yG);
+                ctxFFT.stroke();
+            }
+
+            // Barras de frecuencia
+            // Solo mostramos bins 1..N/2-1  → 1.56 Hz a 200 Hz
+            // N/2 = 128 bins útiles; bin 0 = DC, ignorado
+            const numBins = mag.length - 1; // 127 bins mostrados (bin 1..127)
+            const barW    = canvasFFT.width / numBins;
+            const color   = colorCanal[canal];
+
+            ctxFFT.fillStyle = color;
+            for (let i = 1; i < mag.length; i++) {
+                const h   = (mag[i] / maxMag) * (canvasFFT.height - 4);
+                const x   = (i - 1) * barW;
+                const y   = canvasFFT.height - h;
+                ctxFFT.fillRect(x, y, Math.max(barW - 1, 1), h);
+            }
+
+            // Línea vertical en el pico
+            ctxFFT.strokeStyle = 'rgba(255,255,255,0.4)';
+            ctxFFT.lineWidth = 1;
+            const xPico = (picoBin - 1) * barW + barW / 2;
+            ctxFFT.beginPath();
+            ctxFFT.moveTo(xPico, 0);
+            ctxFFT.lineTo(xPico, canvasFFT.height);
+            ctxFFT.stroke();
+
+            // Etiquetas de frecuencia en el eje X (cada 25 Hz)
+            ctxFFT.fillStyle   = '#546e7a';
+            ctxFFT.font        = '10px monospace';
+            ctxFFT.textAlign   = 'center';
+            const maxFreq = FS / 2; // 200 Hz
+            for (let fTick = 25; fTick <= maxFreq; fTick += 25) {
+                const binTick = fTick / (FS / FFT_N); // bin index para esta freq
+                const xTick   = (binTick - 1) * barW + barW / 2;
+                ctxFFT.fillText(`${fTick} Hz`, xTick, canvasFFT.height - 3);
+            }
+        }
+
+        // Dibuja la etiqueta "1.00 s" al final derecho del eje X del gráfico
+        function dibujarEtiquetaTiempoX(ctx, w, h) {
+            const ventanaSeg = (MAX_PUNTOS / FS).toFixed(2);
+            ctx.fillStyle  = 'rgba(84,110,122,0.9)';
+            ctx.font       = '10px monospace';
+            ctx.textAlign  = 'right';
+            ctx.fillText(`← ${ventanaSeg} s →`, w - 10, h - 16);
+        }
+
+        function dibujarLinea(ctx, arr, pasoX, centroY, escalaY, color) {
+            ctx.strokeStyle = color; ctx.lineWidth = 1.5; ctx.beginPath();
+            for (let i = 0; i < MAX_PUNTOS; i++) {
+                const xC = i * pasoX;
+                const yC = centroY - arr[i] * escalaY;
+                if (i === 0) ctx.moveTo(xC, yC);
+                else         ctx.lineTo(xC, yC);
+            }
+            ctx.stroke();
+        }
+
+        renderGraficos();
+    </script>
+</body>
 </html>
