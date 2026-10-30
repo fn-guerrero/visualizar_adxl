@@ -36,6 +36,21 @@
             cursor: pointer;
         }
         button:hover { background-color: #03a9f4; }
+        button:disabled {
+            background-color: #555;
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+        button.recording {
+            background-color: #d32f2f;
+            animation: pulse 1.5s infinite;
+        }
+        button.recording:hover { background-color: #f44336; }
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.6; }
+            100% { opacity: 1; }
+        }
         .status { font-size: 14px; font-weight: bold; }
         .status.connected { color: #81c784; }
         .status.disconnected { color: #e57373; }
@@ -67,7 +82,9 @@
     
     <div class="controls">
         <button id="btnConectar">Conectar ESP32</button>
+        <button id="btnGrabar" disabled>Grabar CSV</button>
         <span id="txtEstado" class="status disconnected">Desconectado</span>
+        <span id="txtGrabacion" style="font-size: 13px; color: #ff8a80; display: none;">Grabando muestras: <span id="lblMuestras">0</span></span>
         
         <div class="slider-container">
             <label for="zoomVibracion">Zoom Detector:</label>
@@ -98,7 +115,10 @@
 
     <script>
         const btnConectar = document.getElementById('btnConectar');
+        const btnGrabar = document.getElementById('btnGrabar');
         const txtEstado = document.getElementById('txtEstado');
+        const txtGrabacion = document.getElementById('txtGrabacion');
+        const lblMuestras = document.getElementById('lblMuestras');
         const zoomVibracion = document.getElementById('zoomVibracion');
         const lblZoom = document.getElementById('lblZoom');
         
@@ -115,6 +135,10 @@
 
         let puerto, lector, leyendo = false;
         let rxBuffer = new Uint8Array(2048), rxLength = 0;
+
+        // Variables de grabación a CSV
+        let grabando = false;
+        let bufferGrabacion = [];
 
         // --- VARIABLES DEL FILTRO PASAALTOS (F=400Hz, Fc=1Hz) ---
         // Coeficiente Alfa calculado para 1Hz de corte a 400 muestras por segundo
@@ -145,12 +169,52 @@ console.log("LLEGUE AL LISTENER");
                 txtEstado.textContent = "Conectado";
                 txtEstado.className = "status connected";
                 btnConectar.textContent = "Desconectar";
+                btnGrabar.disabled = false;
                 leyendo = true;
                 bucleLectura();
             } catch (error) {
                 alert("Error de conexión: " + error.message);
             }
         });
+
+        btnGrabar.addEventListener('click', () => {
+            if (!grabando) {
+                bufferGrabacion = [];
+                grabando = true;
+                btnGrabar.textContent = "Detener y Guardar CSV";
+                btnGrabar.classList.add('recording');
+                txtGrabacion.style.display = "inline";
+                lblMuestras.textContent = "0";
+            } else {
+                detenerYDescargarCSV();
+            }
+        });
+
+        function detenerYDescargarCSV() {
+            grabando = false;
+            btnGrabar.textContent = "Grabar CSV";
+            btnGrabar.classList.remove('recording');
+            txtGrabacion.style.display = "none";
+
+            if (bufferGrabacion.length === 0) {
+                alert("No se capturaron muestras para exportar.");
+                return;
+            }
+
+            const encabezado = "X;Y;Z\n";
+            const contenido = encabezado + bufferGrabacion.join("\n");
+            const blob = new Blob([contenido], { type: "text/csv;charset=utf-8;" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            const fechaHora = new Date().toISOString().replace(/[:.]/g, "-");
+            a.href = url;
+            a.download = `adxl345_datos_${fechaHora}.csv`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+            bufferGrabacion = [];
+        }
 
         async function bucleLectura() {
             while (puerto.readable && leyendo) {
@@ -181,6 +245,8 @@ console.log("LLEGUE AL LISTENER");
             txtEstado.className = "status disconnected";
             btnConectar.textContent = "Conectar ESP32"; 
             leyendo = false;
+            btnGrabar.disabled = true;
+            if (grabando) detenerYDescargarCSV();
         }
 
         function procesarBuffer() {
@@ -207,6 +273,10 @@ console.log("LLEGUE AL LISTENER");
                     datosY.shift(); datosY.push(y);
                     datosZ.shift(); datosZ.push(z);
 
+                    if (grabando) {
+                        bufferGrabacion.push(`${x};${y};${z}`);
+                    }
+
                     // --- EJECUCIÓN DEL FILTRO PASAALTOS (Fija frecuencia constante) ---
                     hpX = alpha * (hpX + x - prevX);
                     hpY = alpha * (hpY + y - prevY);
@@ -220,6 +290,9 @@ console.log("LLEGUE AL LISTENER");
                     datosVib.shift(); datosVib.push(vibracionAbsoluta);
                 }
                 rxBuffer.copyWithin(0, TRAMA_SIZE, rxLength); rxLength -= TRAMA_SIZE;
+            }
+            if (grabando) {
+                lblMuestras.textContent = bufferGrabacion.length;
             }
             renderGraficos();
         }
